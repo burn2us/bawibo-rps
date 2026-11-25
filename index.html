@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>가위바위보 배틀 - 15연승 &amp; 멀티플레이</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <!-- Toast Notification -->
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+    <!-- Victory Fireworks / Confetti Canvas -->
+    <canvas id="celebration-canvas" class="celebration-canvas hidden"></canvas>
+
+    <!-- ==================== 1. MAIN SCREEN ==================== -->
+    <section id="screen-main" class="screen active">
+      <div class="main-card">
+        <div class="brand-header">
+          <div class="brand-badge">ROCK · PAPER · SCISSORS</div>
+          <h1 class="brand-title">가위바위보 <span class="accent">배틀</span></h1>
+          <p class="brand-subtitle">15연승 세계 최강자 도전 &amp; 실시간 멀티플레이</p>
+        </div>
+
+        <div class="hero-rps-preview" aria-hidden="true">
+          <div class="preview-chip rock">✊</div>
+          <div class="preview-chip scissors">✌️</div>
+          <div class="preview-chip paper">🖐️</div>
+        </div>
+
+        <div class="id-input-group">
+          <label for="player-id-input" class="input-label">플레이어 아이디</label>
+          <div class="input-row">
+            <input
+              type="text"
+              id="player-id-input"
+              class="text-input"
+              placeholder="아이디를 입력하세요 (최대 12자)"
+              maxlength="12"
+              autocomplete="off"
+            />
+            <button id="btn-sound-toggle-main" class="icon-btn" title="사운드 켜기/끄기" aria-label="사운드 토글">🔊</button>
+          </div>
+          <p id="id-error-msg" class="error-msg hidden">아이디를 입력해주세요! 아이디가 없으면 게임을 시작할 수 없습니다.</p>
+        </div>
+
+        <div id="main-stats-bar" class="stats-summary hidden">
+          <div class="stat-pill"><span class="stat-k">전적</span> <span id="main-stat-record" class="stat-v">0승 0패 0무</span></div>
+          <div class="stat-pill"><span class="stat-k">최고 연승</span> <span id="main-stat-best" class="stat-v">0연승</span></div>
+        </div>
+
+        <div class="menu-buttons">
+          <button id="btn-single-mode" class="btn btn-primary btn-lg">
+            <span class="btn-icon">🏆</span>
+            <span class="btn-text">
+              <strong>싱글게임</strong>
+              <small>15연승 AI 도장깨기</small>
+            </span>
+          </button>
+          <button id="btn-multi-mode" class="btn btn-secondary btn-lg">
+            <span class="btn-icon">⚔️</span>
+            <span class="btn-text">
+              <strong>멀티게임</strong>
+              <small>대기실 입장 · 실시간 1:1 대전</small>
+            </span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 2. MULTIPLAYER LOBBY SCREEN ==================== -->
+    <section id="screen-lobby" class="screen">
+      <header class="top-bar">
+        <div class="top-left">
+          <button id="btn-lobby-back" class="btn btn-ghost btn-sm">← 메인</button>
+          <span class="player-badge">👤 <strong id="lobby-player-id">-</strong></span>
+        </div>
+        <div class="top-center">
+          <span class="screen-label">멀티게임 대기실</span>
+        </div>
+        <div class="top-right">
+          <span id="conn-status-badge" class="conn-badge connecting">연결 중...</span>
+        </div>
+      </header>
+
+      <div class="lobby-body">
+        <div class="lobby-stats-strip">
+          <span>내 전적: <strong id="lobby-stat-record">0승 0패 0무</strong></span>
+          <span>현재 연승: <strong id="lobby-stat-streak">0연승</strong></span>
+        </div>
+
+        <div class="create-room-panel">
+          <input
+            type="text"
+            id="room-title-input"
+            class="text-input"
+            placeholder="방 제목을 입력하세요 (비우면 자동 생성)"
+            maxlength="20"
+          />
+          <button id="btn-create-room" class="btn btn-primary">방 만들기</button>
+        </div>
+
+        <div class="room-list-header">
+          <h2>방 목록</h2>
+          <button id="btn-refresh-rooms" class="btn btn-ghost btn-sm">🔄 새로고침</button>
+        </div>
+
+        <div id="room-list" class="room-list">
+          <div class="empty-state">현재 열린 방이 없습니다. 방을 만들어 보세요!</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 3. MULTIPLAYER WAITING ROOM ==================== -->
+    <section id="screen-room" class="screen">
+      <header class="top-bar">
+        <div class="top-left">
+          <button id="btn-room-leave" class="btn btn-danger-outline btn-sm">대기실로 나가기</button>
+        </div>
+        <div class="top-center">
+          <span id="room-header-title" class="screen-label">대기방</span>
+        </div>
+        <div class="top-right">
+          <span class="player-badge">👤 <strong id="room-player-id">-</strong></span>
+        </div>
+      </header>
+
+      <div class="waiting-room-body">
+        <div class="players-vs-card">
+          <div class="seat-box host-seat">
+            <div class="seat-role">방장</div>
+            <div class="seat-avatar">👑</div>
+            <div id="room-host-name" class="seat-name">-</div>
+          </div>
+          <div class="vs-divider">VS</div>
+          <div class="seat-box guest-seat">
+            <div class="seat-role">참가자</div>
+            <div class="seat-avatar">🎮</div>
+            <div id="room-guest-name" class="seat-name waiting">대기 중...</div>
+          </div>
+        </div>
+
+        <div id="room-countdown-box" class="room-countdown hidden">
+          <p>상대방이 입장했습니다! <strong id="room-auto-timer">30</strong>초 후 자동 시작됩니다.</p>
+        </div>
+
+        <div id="room-waiting-msg" class="room-waiting-msg">
+          다른 플레이어가 입장할 때까지 기다리고 있습니다...
+        </div>
+
+        <div class="room-actions">
+          <button id="btn-room-start" class="btn btn-primary btn-lg hidden">게임 시작</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 4. GAME ARENA SCREEN (SINGLE & MULTI) ==================== -->
+    <section id="screen-game" class="screen">
+      <!-- Top Status Bar -->
+      <header class="game-top-bar">
+        <div class="gt-player-info">
+          <div class="gt-id-row">
+            <span class="gt-badge" id="game-mode-badge">싱글</span>
+            <strong id="game-player-id">-</strong>
+          </div>
+          <div class="gt-record" id="game-record-text">0승 0패 0무 · 0연승</div>
+        </div>
+
+        <div class="gt-timer-wrap">
+          <div class="timer-circle" id="game-timer-circle">
+            <span id="game-timer-text">10</span>
+          </div>
+          <div class="timer-bar-bg">
+            <div id="game-timer-bar" class="timer-bar-fill"></div>
+          </div>
+        </div>
+
+        <div class="gt-opponent-info">
+          <div class="gt-opp-name" id="game-opp-name">상대</div>
+          <div class="gt-opp-sub" id="game-opp-sub">1연승 도전</div>
+        </div>
+
+        <div class="gt-controls">
+          <button id="btn-sound-toggle-game" class="icon-btn-sm" title="사운드" aria-label="사운드 토글">🔊</button>
+          <button id="btn-game-exit" class="btn btn-ghost btn-xs">나가기</button>
+        </div>
+      </header>
+
+      <!-- Center Arena -->
+      <main class="arena-center">
+        <!-- Left: My Choice -->
+        <div class="fighter-panel left-panel">
+          <div class="fighter-label">나 (<span id="arena-my-name">-</span>)</div>
+          <div id="arena-my-card" class="rps-display-card spinning">
+            <div id="arena-my-svg" class="rps-svg-slot"></div>
+            <div id="arena-my-choice-label" class="choice-label">선택 중...</div>
+          </div>
+        </div>
+
+        <!-- Center: VS / Result Overlay -->
+        <div class="arena-middle">
+          <div id="arena-vs-badge" class="vs-badge">VS</div>
+          <div id="arena-result-box" class="result-box hidden">
+            <div id="result-title" class="result-title">승리</div>
+            <div id="result-streak" class="result-streak">1연승!</div>
+            <div id="result-sub" class="result-sub"></div>
+          </div>
+        </div>
+
+        <!-- Right: Opponent / AI Choice -->
+        <div class="fighter-panel right-panel">
+          <div class="fighter-label">
+            <span id="arena-opp-avatar" class="opp-mini-avatar"></span>
+            <span id="arena-opp-name">AI</span>
+          </div>
+          <div id="arena-opp-card" class="rps-display-card spinning">
+            <div id="arena-opp-svg" class="rps-svg-slot"></div>
+            <div id="arena-opp-choice-label" class="choice-label">선택 중...</div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Bottom Selection / Post-Round Action Area -->
+      <footer class="arena-bottom">
+        <!-- RPS Selection Buttons -->
+        <div id="rps-choice-menu" class="rps-choice-menu">
+          <button class="rps-btn" data-choice="scissors" aria-label="가위">
+            <div class="rps-btn-svg" data-rps-icon="scissors"></div>
+            <span>가위</span>
+          </button>
+          <button class="rps-btn" data-choice="rock" aria-label="바위">
+            <div class="rps-btn-svg" data-rps-icon="rock"></div>
+            <span>바위</span>
+          </button>
+          <button class="rps-btn" data-choice="paper" aria-label="보">
+            <div class="rps-btn-svg" data-rps-icon="paper"></div>
+            <span>보</span>
+          </button>
+        </div>
+
+        <!-- Single Player: Loss Action Menu -->
+        <div id="single-lose-menu" class="post-action-menu hidden">
+          <button id="btn-single-retry" class="btn btn-primary btn-lg">1연승 도전부터 다시</button>
+          <button id="btn-single-home" class="btn btn-secondary btn-lg">메인 메뉴로 돌아가기</button>
+        </div>
+
+        <!-- Multiplayer: Rematch / Quit Menu (10s auto-continue) -->
+        <div id="multi-post-menu" class="post-action-menu hidden">
+          <div class="multi-post-prompt">
+            <span id="multi-post-status">계속하시겠습니까? (<strong id="multi-post-timer">10</strong>초 후 자동 시작)</span>
+          </div>
+          <div class="multi-post-buttons">
+            <button id="btn-multi-rematch" class="btn btn-primary btn-lg">다시하기</button>
+            <button id="btn-multi-quit" class="btn btn-danger btn-lg">그만하기</button>
+          </div>
+        </div>
+      </footer>
+    </section>
+
+    <!-- ==================== 5. 15-WIN STREAK CHAMPION SCREEN ==================== -->
+    <section id="screen-champion" class="screen">
+      <div class="champion-card">
+        <div class="trophy-glow">🏆</div>
+        <div class="champion-tag">15연승 달성!</div>
+        <h1 class="champion-title">당신은 가위바위보 세계 최강자</h1>
+        <p class="champion-desc">
+          <strong id="champion-player-id">-</strong>님, 모든 15명의 고수를 물리치고 전설이 되셨습니다!
+        </p>
+        <div class="champion-actions">
+          <button id="btn-champ-retry" class="btn btn-primary btn-lg">1연승부터 다시 도전</button>
+          <button id="btn-champ-home" class="btn btn-secondary btn-lg">메인 메뉴로 돌아가기</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="js/storage.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/characters.js"></script>
+  <script src="js/single.js"></script>
+  <script src="js/multi.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
