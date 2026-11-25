@@ -263,6 +263,28 @@ html, body {
   font-size: 1.8rem;
 }
 
+.promo-banner-link {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.promo-banner-link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+.promo-banner-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+}
+
 .id-input-group {
   display: flex;
   flex-direction: column;
